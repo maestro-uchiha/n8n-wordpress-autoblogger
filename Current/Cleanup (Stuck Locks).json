@@ -1,355 +1,212 @@
 {
-  "name": "Cleanup (Stuck Locks)",
+  "name": "3. Cleanup (Stuck Locks)",
   "nodes": [
     {
       "parameters": {
         "rule": {
-          "interval": [
-            {
-              "field": "hours"
-            }
-          ]
+          "interval": [{ "field": "hours", "hoursInterval": 1 }]
         }
       },
-      "id": "6b99e2c7-a9c1-416f-97b8-6667d1dbc754",
-      "name": "Hourly",
+      "id": "trigger-cleanup-001",
+      "name": "Every Hour",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1,
-      "position": [
-        640,
-        -192
-      ]
+      "typeVersion": 1.2,
+      "position": [0, 0]
     },
     {
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.SITE_REGISTRY_SPREADSHEET_ID}}",
-          "mode": ""
+          "value": "={{ $vars.SITE_REGISTRY_SPREADSHEET_ID }}",
+          "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$vars.SITE_REGISTRY_SHEET_ID}}",
-          "mode": ""
-        },
-        "options": {}
-      },
-      "id": "c42b0721-96f9-445b-9589-b343b01cbf7b",
-      "name": "Read Site Registry",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [
-        880,
-        -192
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "LUirTnQ5t8B1Ts5z",
-          "name": "Google Sheets account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "return items.map(i => ({json:{site_config:i.json}}));"
-      },
-      "id": "d6129160-2aff-40d5-b183-562c26cac36c",
-      "name": "Normalize Site Rows",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1168,
-        -192
-      ]
-    },
-    {
-      "parameters": {
-        "options": {}
-      },
-      "id": "9dedb038-a29e-48bd-9481-f2fc0f44b46f",
-      "name": "For Each Site",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [
-        1408,
-        -192
-      ]
-    },
-    {
-      "parameters": {
-        "documentId": {
-          "__rl": true,
-          "value": "={{$vars.SITE_REGISTRY_SPREADSHEET_ID}}",
-          "mode": ""
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "={{$json.site_config.topics_sheet_id}}",
+          "value": "={{ $vars.SITE_REGISTRY_GID }}",
           "mode": "id"
         },
         "options": {}
       },
-      "id": "86ab4634-e00e-4ad5-8177-18893a062b9a",
-      "name": "Read Topics (site)",
+      "id": "read-sites-cleanup-001",
+      "name": "Read Site Registry",
       "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [
-        1648,
-        -192
-      ],
+      "typeVersion": 4.5,
+      "position": [220, 0],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "LUirTnQ5t8B1Ts5z",
+          "id": "YOUR_CREDENTIAL_ID",
           "name": "Google Sheets account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "/**\n * Identify PROCESSING rows older than threshold minutes.\n * Input: Topics rows from Google Sheets read (items).\n * Site config passed via $('For Each Site').first().json.site_config\n * Output: one item per stuck row => {site_config, topic, status, error, updated_at}\n */\n\nconst threshold = Number($vars.PROCESSING_STUCK_THRESHOLD_MINUTES || 60);\nconst now = new Date();\nfunction parseIso(s) {\n  if (!s) return null;\n  const str = String(s).trim();\n  if (!str) return null;\n  const isoish = str.includes('T') ? str : str.replace(' ', 'T');\n  const d = new Date(isoish);\n  return isNaN(d.getTime()) ? null : d;\n}\n\n// Get site_config from the For Each Site loop node\nconst siteNode = $('For Each Site').first();\nconst site_config = siteNode?.json?.site_config || {};\n\nconst out = [];\n\nfor (const it of items) {\n  const r = it.json || {};\n  const status = String(r.status || '').trim().toUpperCase();\n  if (status !== 'PROCESSING') continue;\n  const locked = parseIso(r.locked_at);\n  if (!locked) continue;\n  const ageMin = (now.getTime() - locked.getTime()) / 60000;\n  if (ageMin >= threshold) {\n    out.push({\n      json: {\n        site_config: site_config,\n        topic: r.topic,\n        status: 'FAILED',\n        error: 'stuck lock cleanup',\n        updated_at: now.toISOString()\n      }\n    });\n  }\n}\n\nreturn out.length > 0 ? out : [];\n"
+        "jsCode": "/**\n * Build a list of topics sheets to check for stuck locks.\n * Only process enabled sites.\n */\nconst sheets = [];\n\nfor (const item of $input.all()) {\n  const site = item.json;\n  const isEnabled = site.enabled === true || String(site.enabled || '').toLowerCase() === 'true';\n  if (isEnabled && site.topics_spreadsheet_id && site.topics_gid) {\n    sheets.push({\n      json: {\n        site_id: site.site_id,\n        site_name: site.site_name,\n        topics_spreadsheet_id: site.topics_spreadsheet_id,\n        topics_gid: site.topics_gid\n      }\n    });\n  }\n}\n\nreturn sheets.length > 0 ? sheets : [];\n"
       },
-      "id": "9ea5484b-69c2-449a-9ec2-9232013c1c45",
-      "name": "Find Stuck PROCESSING",
+      "id": "filter-enabled-001",
+      "name": "Filter Enabled Sites",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1888,
-        -192
-      ]
+      "position": [440, 0]
     },
     {
       "parameters": {
         "options": {}
       },
-      "id": "6828c13e-4afe-4618-9961-da37bced92f4",
-      "name": "For Each Stuck Row",
+      "id": "loop-cleanup-001",
+      "name": "For Each Site",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [
-        2128,
-        -192
-      ]
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.topics_spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.topics_gid }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "read-topics-cleanup-001",
+      "name": "Read Topics",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [880, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Find stuck locks: PROCESSING rows older than 30 minutes.\n * Returns rows that need to be reset to FAILED.\n */\nconst now = new Date();\nconst LOCK_TIMEOUT_MINUTES = 30;\nconst siteInfo = $('For Each Site').first().json;\n\nconst stuckRows = [];\n\nfor (const item of $input.all()) {\n  const row = item.json;\n  const status = String(row.status || '').trim().toUpperCase();\n  \n  if (status === 'PROCESSING') {\n    const lockedAt = row.locked_at ? new Date(row.locked_at) : null;\n    \n    if (lockedAt) {\n      const elapsedMin = (now - lockedAt) / 60000;\n      if (elapsedMin > LOCK_TIMEOUT_MINUTES) {\n        stuckRows.push({\n          json: {\n            ...siteInfo,\n            topic: row.topic,\n            locked_at: row.locked_at,\n            elapsed_minutes: Math.round(elapsedMin)\n          }\n        });\n      }\n    } else {\n      // No locked_at timestamp but PROCESSING - treat as stuck\n      stuckRows.push({\n        json: {\n          ...siteInfo,\n          topic: row.topic,\n          locked_at: 'unknown',\n          elapsed_minutes: -1\n        }\n      });\n    }\n  }\n}\n\nreturn stuckRows.length > 0 ? stuckRows : [{ json: { no_stuck: true, ...siteInfo } }];\n"
+      },
+      "id": "find-stuck-001",
+      "name": "Find Stuck Locks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "caseSensitive": true },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-stuck",
+              "operator": { "type": "boolean", "operation": "notTrue" },
+              "leftValue": "={{ $json.no_stuck }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-stuck-001",
+      "name": "Has Stuck?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1320, 0]
     },
     {
       "parameters": {
         "operation": "update",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.SITE_REGISTRY_SPREADSHEET_ID}}",
-          "mode": ""
+          "value": "={{ $json.topics_spreadsheet_id }}",
+          "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$json.site_config.topics_sheet_id}}",
+          "value": "={{ $json.topics_gid }}",
           "mode": "id"
         },
         "columns": {
-          "mappingMode": "autoMapInputData",
-          "value": {},
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $json.topic }}",
+            "status": "FAILED",
+            "error": "Stuck lock - auto-reset by cleanup workflow",
+            "updated_at": "={{ $now.toISO() }}"
+          },
           "matchingColumns": ["topic"],
           "schema": [
-            {
-              "id": "topic",
-              "displayName": "topic",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "status",
-              "displayName": "status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "error",
-              "displayName": "error",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "updated_at",
-              "displayName": "updated_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
+            { "id": "topic", "displayName": "topic", "type": "string", "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "type": "string", "canBeUsedToMatch": false },
+            { "id": "error", "displayName": "error", "type": "string", "canBeUsedToMatch": false },
+            { "id": "updated_at", "displayName": "updated_at", "type": "string", "canBeUsedToMatch": false }
+          ]
         },
         "options": {}
       },
-      "id": "aec88f43-f764-4c60-ba0d-50cf700417ac",
-      "name": "Mark FAILED (stuck lock)",
+      "id": "reset-stuck-001",
+      "name": "Reset to FAILED",
       "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [
-        2368,
-        -192
-      ],
+      "typeVersion": 4.5,
+      "position": [1540, -100],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "LUirTnQ5t8B1Ts5z",
+          "id": "YOUR_CREDENTIAL_ID",
           "name": "Google Sheets account"
         }
       }
     },
     {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ 'https://api.telegram.org/bot' + ($json.site_config.telegram_bot_token || $vars.TELEGRAM_BOT_TOKEN || '') + '/sendMessage' }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $json.site_config.telegram_chat_id || $vars.TELEGRAM_CHAT_ID || '', text: '🔓 Stuck Lock Cleaned\\n\\nSite: ' + ($json.site_config.site_name || $json.site_config.base_url || 'Unknown') + '\\nTopic: ' + ($json.topic || 'Unknown') + '\\nStatus: Reset to FAILED', parse_mode: 'HTML' }) }}",
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
-      },
-      "id": "7fe5de0e-11b4-4803-90b9-6e522aa85e0d",
-      "name": "Telegram Cleanup Notify (optional)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        2608,
-        -192
-      ]
+      "parameters": {},
+      "id": "noop-cleanup-001",
+      "name": "No Stuck Locks",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1540, 100]
     }
   ],
-  "pinData": {},
   "connections": {
-    "Hourly": {
-      "main": [
-        [
-          {
-            "node": "Read Site Registry",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Every Hour": {
+      "main": [[{ "node": "Read Site Registry", "type": "main", "index": 0 }]]
     },
     "Read Site Registry": {
-      "main": [
-        [
-          {
-            "node": "Normalize Site Rows",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Filter Enabled Sites", "type": "main", "index": 0 }]]
     },
-    "Normalize Site Rows": {
-      "main": [
-        [
-          {
-            "node": "For Each Site",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Filter Enabled Sites": {
+      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
     },
     "For Each Site": {
       "main": [
-        [],
-        [
-          {
-            "node": "Read Topics (site)",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Read Topics", "type": "main", "index": 0 }],
+        []
       ]
     },
-    "Read Topics (site)": {
+    "Read Topics": {
+      "main": [[{ "node": "Find Stuck Locks", "type": "main", "index": 0 }]]
+    },
+    "Find Stuck Locks": {
+      "main": [[{ "node": "Has Stuck?", "type": "main", "index": 0 }]]
+    },
+    "Has Stuck?": {
       "main": [
-        [
-          {
-            "node": "Find Stuck PROCESSING",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Reset to FAILED", "type": "main", "index": 0 }],
+        [{ "node": "No Stuck Locks", "type": "main", "index": 0 }]
       ]
     },
-    "Find Stuck PROCESSING": {
-      "main": [
-        [
-          {
-            "node": "For Each Stuck Row",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Reset to FAILED": {
+      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
     },
-    "For Each Stuck Row": {
-      "main": [
-        [
-          {
-            "node": "Mark FAILED (stuck lock)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "For Each Site",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Mark FAILED (stuck lock)": {
-      "main": [
-        [
-          {
-            "node": "Telegram Cleanup Notify (optional)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Telegram Cleanup Notify (optional)": {
-      "main": [
-        [
-          {
-            "node": "For Each Stuck Row",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "No Stuck Locks": {
+      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
     }
   },
   "active": false,
-  "settings": {
-    "executionOrder": "v1",
-    "availableInMCP": false
-  },
-  "versionId": "55ef2d00-9475-4fa1-bce3-1396061ec05e",
-  "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "a61a4baa2302a2fdae391c1ce579320423678482651af53fbc67efec9851d157"
-  },
-  "id": "V8I9qtuVEFJ7cXpTYLFaK",
+  "settings": { "executionOrder": "v1" },
+  "versionId": "v2-clean-001",
+  "meta": { "templateId": "autoblogger-cleanup-v2" },
   "tags": []
 }
