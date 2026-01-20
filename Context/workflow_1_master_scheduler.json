@@ -1,0 +1,547 @@
+{
+  "name": "Master Scheduler (Multi-site)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "value": 10
+            }
+          ]
+        }
+      },
+      "id": "3b3d3d12-b42c-47d5-ba21-7b9f381dda5e",
+      "name": "Every 10 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": "={{$env.SITE_REGISTRY_SPREADSHEET_ID}}",
+        "sheetName": "={{$env.SITE_REGISTRY_SHEET_NAME}}",
+        "options": {
+          "returnAll": true,
+          "includeRowNumbers": true
+        }
+      },
+      "id": "5b44c845-519c-4baa-bb93-af02c0e498b4",
+      "name": "Read Site Registry",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Compute which sites are due to post now.\n * Expects items = rows from Site_Registry (with rowNumber).\n * Output: only due sites, with normalized fields.\n */\n\nfunction nowInTz(tz) {\n  try {\n    // Convert \"now\" to a Date that represents wall-clock time in tz\n    return new Date(new Date().toLocaleString('en-US', { timeZone: tz }));\n  } catch {\n    return new Date();\n  }\n}\n\nfunction parseIso(s) {\n  if (!s) return null;\n  const d = new Date(s);\n  return isNaN(d.getTime()) ? null : d;\n}\n\nfunction hmToMinutes(hm) {\n  if (!hm || typeof hm !== 'string') return null;\n  const m = hm.trim().match(/^(\\d{1,2}):(\\d{2})$/);\n  if (!m) return null;\n  return (Number(m[1]) * 60) + Number(m[2]);\n}\n\nfunction minutesOfDay(d) {\n  return d.getHours() * 60 + d.getMinutes();\n}\n\nfunction startOfDay(d) {\n  const x = new Date(d);\n  x.setHours(0,0,0,0);\n  return x;\n}\n\nfunction startOfWeekMon(d) {\n  // Monday start\n  const x = startOfDay(d);\n  const day = (x.getDay() + 6) % 7; // Mon=0 .. Sun=6\n  x.setDate(x.getDate() - day);\n  return x;\n}\n\nfunction sameDay(a,b) {\n  return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();\n}\n\nfunction inWindow(now, startHm, endHm) {\n  const s = hmToMinutes(startHm);\n  const e = hmToMinutes(endHm);\n  if (s === null || e === null) return true;\n  const m = minutesOfDay(now);\n  if (s <= e) return m >= s && m <= e;\n  // Window spans midnight\n  return m >= s || m <= e;\n}\n\nconst weekdayMap = { Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6, Sun:0 };\n\nconst out = [];\nfor (const item of items) {\n  const s = item.json || {};\n  const tz = s.timezone || 'Africa/Douala';\n  const now = nowInTz(tz);\n\n  const mode = (s.schedule_mode || '').toLowerCase();\n  const interval = Number(s.interval || 0);\n  const last = parseIso(s.last_posted_at);\n\n  // Respect optional window\n  if (!inWindow(now, s.window_start, s.window_end)) continue;\n\n  let due = false;\n\n  if (mode === 'minutes') {\n    if (!last) due = true;\n    else due = (now.getTime() - last.getTime()) >= interval * 60 * 1000;\n  } else if (mode === 'hours') {\n    if (!last) due = true;\n    else due = (now.getTime() - last.getTime()) >= interval * 60 * 60 * 1000;\n  } else if (mode === 'daily') {\n    const t = hmToMinutes(s.daily_time) ?? 0;\n    const afterTime = minutesOfDay(now) >= t;\n    due = afterTime && (!last || !sameDay(now, last));\n  } else if (mode === 'weekly') {\n    const want = weekdayMap[s.weekly_day] ?? null;\n    const isDay = (want === null) ? false : now.getDay() === want;\n    const t = hmToMinutes(s.daily_time) ?? 0;\n    const afterTime = minutesOfDay(now) >= t;\n\n    if (isDay && afterTime) {\n      if (!last) due = true;\n      else {\n        const weekStart = startOfWeekMon(now).getTime();\n        due = last.getTime() < weekStart;\n      }\n    }\n  } else {\n    // default: not due\n    due = false;\n  }\n\n  if (due) out.push({ json: { site: s }});\n}\n\nreturn out;\n"
+      },
+      "id": "0cd62025-20da-45ae-b34c-0b577055dc05",
+      "name": "Schedule Gate (due sites only)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "d91da41b-de49-4a3b-916f-f4c5fcec7333",
+      "name": "For Each Due Site",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": "={{$json.site.topics_sheet_id}}",
+        "sheetName": "={{$json.site.topics_tab_name || 'Topics'}}",
+        "options": {
+          "returnAll": true,
+          "includeRowNumbers": true
+        }
+      },
+      "id": "8e8b137b-61a1-4b03-b264-b989f2ba1c59",
+      "name": "Read Topics (site)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Pick first QUEUED topic row and produce update fields for locking.\n * Input: {site} from previous node, and Topics rows from Google Sheets read.\n * Google Sheets read items are on `items` and include `rowNumber` and columns.\n *\n * Output:\n * - If a topic exists: { site, topicRow, topicRowNumber, nowIso }\n * - Else: { site, skip: true }\n */\n\nfunction nowIso() { return new Date().toISOString(); }\n\nconst site = $json.site;\n\nlet chosen = null;\nfor (const it of items) {\n  const r = it.json || {};\n  const status = String(r.status || '').toUpperCase();\n  if (status === 'QUEUED') { chosen = r; break; }\n}\n\nif (!chosen) {\n  return [{ json: { site, skip: true } }];\n}\n\nconst now = nowIso();\nconst update = {\n  ...chosen,\n  status: 'PROCESSING',\n  locked_at: now,\n  error: '',\n  updated_at: now,\n  created_at: chosen.created_at || now,\n};\n\nreturn [{\n  json: {\n    site,\n    topicRow: update,\n    topicRowNumber: chosen.rowNumber,\n    nowIso: now\n  }\n}];\n"
+      },
+      "id": "10ef8e73-13c0-4213-b449-f7b2f996471f",
+      "name": "Pick & Lock Topic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.skip}}",
+              "operation": "isFalse"
+            }
+          ]
+        }
+      },
+      "id": "1cefd25f-217e-4c27-a771-d44d89658c05",
+      "name": "Has Topic?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{$json.site.topics_sheet_id}}",
+        "sheetName": "={{$json.site.topics_tab_name || 'Topics'}}",
+        "rowNumber": "={{$json.topicRowNumber}}",
+        "dataToSend": "autoMapInputData",
+        "options": {},
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "field": "status",
+              "value": "PROCESSING"
+            },
+            {
+              "field": "locked_at",
+              "value": "={{$json.nowIso}}"
+            },
+            {
+              "field": "error",
+              "value": ""
+            },
+            {
+              "field": "updated_at",
+              "value": "={{$json.nowIso}}"
+            },
+            {
+              "field": "created_at",
+              "value": "={{$json.topicRow.created_at || $json.nowIso}}"
+            },
+            {
+              "field": "topic",
+              "value": "={{$json.topicRow.topic}}"
+            },
+            {
+              "field": "categories",
+              "value": "={{$json.topicRow.categories || ''}}"
+            },
+            {
+              "field": "tags",
+              "value": "={{$json.topicRow.tags || ''}}"
+            }
+          ]
+        }
+      },
+      "id": "7d7b2728-a207-4489-9fd3-6298cd6b36c9",
+      "name": "Lock Topic Row (PROCESSING)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1720,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{site:$node['Pick & Lock Topic'].json.site, topicRow:$node['Pick & Lock Topic'].json.topicRow}}];"
+      },
+      "id": "a0b283c7-a264-4eeb-8ef0-2c3e6195380d",
+      "name": "Build Publisher Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "{WORKFLOW_2_ID}",
+        "options": {}
+      },
+      "id": "c24f23bf-2b98-48ff-935d-e3dd58e8909b",
+      "name": "Execute Publisher Workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1960,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.ok}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "aef89442-e749-4587-8cf4-75c4b4c6e85c",
+      "name": "Publisher OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{$json.site.topics_sheet_id}}",
+        "sheetName": "={{$json.site.topics_tab_name || 'Topics'}}",
+        "rowNumber": "={{$node['Pick & Lock Topic'].json.topicRowNumber}}",
+        "dataToSend": "autoMapInputData",
+        "options": {},
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "field": "status",
+              "value": "DONE"
+            },
+            {
+              "field": "post_url",
+              "value": "={{$json.post_url}}"
+            },
+            {
+              "field": "updated_at",
+              "value": "={{new Date().toISOString()}}"
+            },
+            {
+              "field": "error",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "id": "795e94a9-5341-4553-8cb5-bcd3fd5734ad",
+      "name": "Mark Topic DONE",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        2440,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{$env.SITE_REGISTRY_SPREADSHEET_ID}}",
+        "sheetName": "={{$env.SITE_REGISTRY_SHEET_NAME}}",
+        "rowNumber": "={{$json.site.rowNumber}}",
+        "dataToSend": "autoMapInputData",
+        "options": {},
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "field": "last_posted_at",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        }
+      },
+      "id": "80766fba-1188-47b4-be8c-1660512ee0c5",
+      "name": "Update Site last_posted_at",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        2680,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{$json.site.topics_sheet_id}}",
+        "sheetName": "={{$json.site.topics_tab_name || 'Topics'}}",
+        "rowNumber": "={{$node['Pick & Lock Topic'].json.topicRowNumber}}",
+        "dataToSend": "autoMapInputData",
+        "options": {},
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "field": "status",
+              "value": "FAILED"
+            },
+            {
+              "field": "error",
+              "value": "={{$json.error || 'Publisher failed'}}"
+            },
+            {
+              "field": "updated_at",
+              "value": "={{new Date().toISOString()}}"
+            }
+          ]
+        }
+      },
+      "id": "6ebf93f5-46cb-4262-b223-05327748a26d",
+      "name": "Mark Topic FAILED",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        2440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{'https://api.telegram.org/bot' + ($json.site.telegram_bot_token || '{TELEGRAM_BOT_TOKEN}') + '/sendMessage'}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "chat_id",
+              "value": "={{$json.site.telegram_chat_id || '{TELEGRAM_CHAT_ID}'}}"
+            },
+            {
+              "name": "text",
+              "value": "={{'[WP Autoblog] FAILED: ' + ($node['Pick & Lock Topic'].json.topicRow.topic || '') + ' — ' + ($json.error || 'Unknown error')}}"
+            }
+          ]
+        }
+      },
+      "id": "ff9a4239-47d5-464f-8fb2-960c7682cc00",
+      "name": "Telegram Failure Notify (optional)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2680,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Every 10 minutes": {
+      "main": [
+        [
+          {
+            "node": "Read Site Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Site Registry": {
+      "main": [
+        [
+          {
+            "node": "Schedule Gate (due sites only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Gate (due sites only)": {
+      "main": [
+        [
+          {
+            "node": "For Each Due Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "For Each Due Site": {
+      "main": [
+        [
+          {
+            "node": "Read Topics (site)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Topics (site)": {
+      "main": [
+        [
+          {
+            "node": "Pick & Lock Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick & Lock Topic": {
+      "main": [
+        [
+          {
+            "node": "Has Topic?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Topic?": {
+      "main": [
+        [
+          {
+            "node": "Lock Topic Row (PROCESSING)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "For Each Due Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lock Topic Row (PROCESSING)": {
+      "main": [
+        [
+          {
+            "node": "Build Publisher Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Publisher Workflow": {
+      "main": [
+        [
+          {
+            "node": "Publisher OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publisher OK?": {
+      "main": [
+        [
+          {
+            "node": "Mark Topic DONE",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Topic FAILED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Topic DONE": {
+      "main": [
+        [
+          {
+            "node": "Update Site last_posted_at",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Site last_posted_at": {
+      "main": [
+        [
+          {
+            "node": "For Each Due Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Topic FAILED": {
+      "main": [
+        [
+          {
+            "node": "Telegram Failure Notify (optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Failure Notify (optional)": {
+      "main": [
+        [
+          {
+            "node": "For Each Due Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Publisher Payload": {
+      "main": [
+        [
+          {
+            "node": "Execute Publisher Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "af0f5a7a-ac43-4a80-9edd-7c103c3d94f7",
+  "id": "c561ce98-9573-421d-ad38-027954d0abf9",
+  "tags": []
+}

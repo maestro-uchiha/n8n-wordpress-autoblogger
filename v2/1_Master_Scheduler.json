@@ -1,0 +1,414 @@
+{
+  "name": "1. Master Scheduler (Autoblogger)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 10 }]
+        }
+      },
+      "id": "trigger-001",
+      "name": "Every 10 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.SITE_REGISTRY_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $vars.SITE_REGISTRY_GID }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "read-registry-001",
+      "name": "Read Site Registry",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [220, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Schedule Gate: Filter sites that are due for posting.\n * Checks: enabled, interval elapsed since last_posted_at\n */\nconst now = new Date();\nconst dueSites = [];\n\nfor (const item of $input.all()) {\n  const site = item.json;\n  \n  // Skip disabled sites (handle boolean true or string 'TRUE'/'true')\n  const isEnabled = site.enabled === true || String(site.enabled || '').toLowerCase() === 'true';\n  if (!isEnabled) continue;\n  \n  // Check interval\n  const intervalMin = Number(site.post_interval_minutes || 120);\n  const lastPosted = site.last_posted_at ? new Date(site.last_posted_at) : null;\n  \n  if (lastPosted) {\n    const elapsedMin = (now - lastPosted) / 60000;\n    if (elapsedMin < intervalMin) continue;\n  }\n  \n  // Site is due\n  dueSites.push({ json: { site_config: site } });\n}\n\nreturn dueSites.length > 0 ? dueSites : [];\n"
+      },
+      "id": "schedule-gate-001",
+      "name": "Schedule Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop-sites-001",
+      "name": "For Each Site",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.site_config.topics_spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.site_config.topics_gid }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "read-topics-001",
+      "name": "Read Topics",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [880, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Pick first QUEUED topic and prepare for locking.\n */\nconst siteConfig = $('For Each Site').first().json.site_config;\nconst now = new Date().toISOString();\n\nlet chosen = null;\nfor (const item of $input.all()) {\n  const row = item.json;\n  const status = String(row.status || '').trim().toUpperCase();\n  if (status === 'QUEUED' || status === 'READY') {\n    chosen = row;\n    break;\n  }\n}\n\nif (!chosen) {\n  return [{ json: { site_config: siteConfig, topicRow: null, hasTopic: false } }];\n}\n\nreturn [{\n  json: {\n    site_config: siteConfig,\n    topicRow: {\n      ...chosen,\n      status: 'PROCESSING',\n      locked_at: now,\n      error: ''\n    },\n    row_number: chosen.row_number,\n    hasTopic: true\n  }\n}];\n"
+      },
+      "id": "pick-topic-001",
+      "name": "Pick Topic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "caseSensitive": true, "looseTypeValidation": true },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-has-topic",
+              "operator": { "type": "string", "operation": "notEmpty" },
+              "leftValue": "={{ $json.topicRow?.topic }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-has-topic-001",
+      "name": "Has Topic?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.site_config.topics_spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.site_config.topics_gid }}",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $json.topicRow.topic }}",
+            "status": "PROCESSING",
+            "locked_at": "={{ $json.topicRow.locked_at }}",
+            "error": ""
+          },
+          "matchingColumns": ["topic"],
+          "schema": [
+            { "id": "topic", "displayName": "topic", "type": "string", "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "type": "string", "canBeUsedToMatch": false },
+            { "id": "locked_at", "displayName": "locked_at", "type": "string", "canBeUsedToMatch": false },
+            { "id": "error", "displayName": "error", "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "lock-topic-001",
+      "name": "Lock Topic (PROCESSING)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1540, -100],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Prepare Publisher Input - Merge site_config with topic data\n * The Lock Topic node loses the original context, so we need to rebuild it\n */\nconst siteConfig = $('Has Topic?').first().json.site_config;\nconst topicRow = $('Has Topic?').first().json.topicRow;\n\nreturn [{\n  json: {\n    site_config: siteConfig,\n    topicRow: topicRow\n  }\n}];\n"
+      },
+      "id": "prepare-input-001",
+      "name": "Prepare Publisher Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, -100]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $vars.PUBLISHER_WORKFLOW_ID }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "call-publisher-001",
+      "name": "Execute Publisher",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1980, -100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "looseTypeValidation": true },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-ok",
+              "operator": { "type": "string", "operation": "equals" },
+              "leftValue": "={{ String($json.ok) }}",
+              "rightValue": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-success-001",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2200, -100]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.site?.topics_spreadsheet_id || $json.site_config?.topics_spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.site?.topics_gid || $json.site_config?.topics_gid }}",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $json.topicRow.topic }}",
+            "status": "DONE",
+            "post_id": "={{ $json.post_id }}",
+            "post_url": "={{ $json.post_url }}",
+            "error": "",
+            "locked_at": "",
+            "updated_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": ["topic"],
+          "schema": [
+            { "id": "topic", "displayName": "topic", "type": "string", "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "type": "string", "canBeUsedToMatch": false },
+            { "id": "post_id", "displayName": "post_id", "type": "string", "canBeUsedToMatch": false },
+            { "id": "post_url", "displayName": "post_url", "type": "string", "canBeUsedToMatch": false },
+            { "id": "error", "displayName": "error", "type": "string", "canBeUsedToMatch": false },
+            { "id": "locked_at", "displayName": "locked_at", "type": "string", "canBeUsedToMatch": false },
+            { "id": "updated_at", "displayName": "updated_at", "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "mark-done-001",
+      "name": "Mark Topic DONE",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2200, -200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.SITE_REGISTRY_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $vars.SITE_REGISTRY_GID }}",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "site_id": "={{ $json.site?.site_id || $json.site_config?.site_id }}",
+            "last_posted_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": ["site_id"],
+          "schema": [
+            { "id": "site_id", "displayName": "site_id", "type": "string", "canBeUsedToMatch": true },
+            { "id": "last_posted_at", "displayName": "last_posted_at", "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-site-001",
+      "name": "Update Site last_posted_at",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2420, -200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.site?.topics_spreadsheet_id || $json.site_config?.topics_spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.site?.topics_gid || $json.site_config?.topics_gid }}",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $json.topicRow.topic }}",
+            "status": "FAILED",
+            "error": "={{ $json.error || $json.failed_at_step || 'Unknown error' }}",
+            "locked_at": "",
+            "updated_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": ["topic"],
+          "schema": [
+            { "id": "topic", "displayName": "topic", "type": "string", "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "type": "string", "canBeUsedToMatch": false },
+            { "id": "error", "displayName": "error", "type": "string", "canBeUsedToMatch": false },
+            { "id": "locked_at", "displayName": "locked_at", "type": "string", "canBeUsedToMatch": false },
+            { "id": "updated_at", "displayName": "updated_at", "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "mark-failed-001",
+      "name": "Mark Topic FAILED",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2200, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "noop-001",
+      "name": "No Topics (Skip)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1540, 100]
+    }
+  ],
+  "connections": {
+    "Every 10 Minutes": {
+      "main": [[{ "node": "Read Site Registry", "type": "main", "index": 0 }]]
+    },
+    "Read Site Registry": {
+      "main": [[{ "node": "Schedule Gate", "type": "main", "index": 0 }]]
+    },
+    "Schedule Gate": {
+      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+    },
+    "For Each Site": {
+      "main": [
+        [{ "node": "Read Topics", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Read Topics": {
+      "main": [[{ "node": "Pick Topic", "type": "main", "index": 0 }]]
+    },
+    "Pick Topic": {
+      "main": [[{ "node": "Has Topic?", "type": "main", "index": 0 }]]
+    },
+    "Has Topic?": {
+      "main": [
+        [{ "node": "Lock Topic (PROCESSING)", "type": "main", "index": 0 }],
+        [{ "node": "No Topics (Skip)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lock Topic (PROCESSING)": {
+      "main": [[{ "node": "Prepare Publisher Input", "type": "main", "index": 0 }]]
+    },
+    "Prepare Publisher Input": {
+      "main": [[{ "node": "Execute Publisher", "type": "main", "index": 0 }]]
+    },
+    "Execute Publisher": {
+      "main": [[{ "node": "Success?", "type": "main", "index": 0 }]]
+    },
+    "Success?": {
+      "main": [
+        [{ "node": "Mark Topic DONE", "type": "main", "index": 0 }],
+        [{ "node": "Mark Topic FAILED", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark Topic DONE": {
+      "main": [[{ "node": "Update Site last_posted_at", "type": "main", "index": 0 }]]
+    },
+    "Update Site last_posted_at": {
+      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+    },
+    "Mark Topic FAILED": {
+      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+    },
+    "No Topics (Skip)": {
+      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "v2.3-full-spec",
+  "meta": { "templateId": "autoblogger-v2.3" },
+  "tags": []
+}

@@ -1,0 +1,212 @@
+{
+  "name": "3. Cleanup (Stuck Locks)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 1 }]
+        }
+      },
+      "id": "trigger-cleanup-001",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.SITE_REGISTRY_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $vars.SITE_REGISTRY_GID }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "read-sites-cleanup-001",
+      "name": "Read Site Registry",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [220, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Build a list of topics sheets to check for stuck locks.\n * Only process enabled sites.\n */\nconst sheets = [];\n\nfor (const item of $input.all()) {\n  const site = item.json;\n  const isEnabled = site.enabled === true || String(site.enabled || '').toLowerCase() === 'true';\n  if (isEnabled && site.topics_spreadsheet_id && site.topics_gid) {\n    sheets.push({\n      json: {\n        site_id: site.site_id,\n        site_name: site.site_name,\n        topics_spreadsheet_id: site.topics_spreadsheet_id,\n        topics_gid: site.topics_gid\n      }\n    });\n  }\n}\n\nreturn sheets.length > 0 ? sheets : [];\n"
+      },
+      "id": "filter-enabled-001",
+      "name": "Filter Enabled Sites",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop-cleanup-001",
+      "name": "For Each Site",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.topics_spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.topics_gid }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "read-topics-cleanup-001",
+      "name": "Read Topics",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [880, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Find stuck locks: PROCESSING rows older than 30 minutes.\n * Returns rows that need to be reset to FAILED.\n */\nconst now = new Date();\nconst LOCK_TIMEOUT_MINUTES = 30;\nconst siteInfo = $('For Each Site').first().json;\n\nconst stuckRows = [];\n\nfor (const item of $input.all()) {\n  const row = item.json;\n  const status = String(row.status || '').trim().toUpperCase();\n  \n  if (status === 'PROCESSING') {\n    const lockedAt = row.locked_at ? new Date(row.locked_at) : null;\n    \n    if (lockedAt) {\n      const elapsedMin = (now - lockedAt) / 60000;\n      if (elapsedMin > LOCK_TIMEOUT_MINUTES) {\n        stuckRows.push({\n          json: {\n            ...siteInfo,\n            topic: row.topic,\n            locked_at: row.locked_at,\n            elapsed_minutes: Math.round(elapsedMin)\n          }\n        });\n      }\n    } else {\n      // No locked_at timestamp but PROCESSING - treat as stuck\n      stuckRows.push({\n        json: {\n          ...siteInfo,\n          topic: row.topic,\n          locked_at: 'unknown',\n          elapsed_minutes: -1\n        }\n      });\n    }\n  }\n}\n\nreturn stuckRows.length > 0 ? stuckRows : [{ json: { no_stuck: true, ...siteInfo } }];\n"
+      },
+      "id": "find-stuck-001",
+      "name": "Find Stuck Locks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "caseSensitive": true },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-stuck",
+              "operator": { "type": "boolean", "operation": "notTrue" },
+              "leftValue": "={{ $json.no_stuck }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-stuck-001",
+      "name": "Has Stuck?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.topics_spreadsheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.topics_gid }}",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $json.topic }}",
+            "status": "FAILED",
+            "error": "Stuck lock - auto-reset by cleanup workflow",
+            "updated_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": ["topic"],
+          "schema": [
+            { "id": "topic", "displayName": "topic", "type": "string", "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "type": "string", "canBeUsedToMatch": false },
+            { "id": "error", "displayName": "error", "type": "string", "canBeUsedToMatch": false },
+            { "id": "updated_at", "displayName": "updated_at", "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "reset-stuck-001",
+      "name": "Reset to FAILED",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1540, -100],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "noop-cleanup-001",
+      "name": "No Stuck Locks",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1540, 100]
+    }
+  ],
+  "connections": {
+    "Every Hour": {
+      "main": [[{ "node": "Read Site Registry", "type": "main", "index": 0 }]]
+    },
+    "Read Site Registry": {
+      "main": [[{ "node": "Filter Enabled Sites", "type": "main", "index": 0 }]]
+    },
+    "Filter Enabled Sites": {
+      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+    },
+    "For Each Site": {
+      "main": [
+        [{ "node": "Read Topics", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Read Topics": {
+      "main": [[{ "node": "Find Stuck Locks", "type": "main", "index": 0 }]]
+    },
+    "Find Stuck Locks": {
+      "main": [[{ "node": "Has Stuck?", "type": "main", "index": 0 }]]
+    },
+    "Has Stuck?": {
+      "main": [
+        [{ "node": "Reset to FAILED", "type": "main", "index": 0 }],
+        [{ "node": "No Stuck Locks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Reset to FAILED": {
+      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+    },
+    "No Stuck Locks": {
+      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "v2-clean-001",
+  "meta": { "templateId": "autoblogger-cleanup-v2" },
+  "tags": []
+}

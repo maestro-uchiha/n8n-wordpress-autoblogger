@@ -1,0 +1,303 @@
+{
+  "name": "Cleanup (Stuck Locks)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "value": 1
+            }
+          ]
+        }
+      },
+      "id": "33885889-b98f-4e1a-b8bb-6cb9ba2d9b40",
+      "name": "Hourly",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": "={{$env.SITE_REGISTRY_SPREADSHEET_ID}}",
+        "sheetName": "={{$env.SITE_REGISTRY_SHEET_NAME}}",
+        "options": {
+          "returnAll": true,
+          "includeRowNumbers": true
+        }
+      },
+      "id": "0a0faf6e-2b98-4fe0-b699-945395c15a2c",
+      "name": "Read Site Registry",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(i => ({json:{site:i.json}}));"
+      },
+      "id": "944c370d-8241-4ee4-8f1c-afcf721dce21",
+      "name": "Normalize Site Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "3202555e-37ec-47f3-85ed-d8651a863e22",
+      "name": "For Each Site",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": "={{$json.site.topics_sheet_id}}",
+        "sheetName": "={{$json.site.topics_tab_name || 'Topics'}}",
+        "options": {
+          "returnAll": true,
+          "includeRowNumbers": true
+        }
+      },
+      "id": "55ebd248-7f91-4a1f-af22-eaee56d781fa",
+      "name": "Read Topics (site)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Identify PROCESSING rows older than threshold minutes.\n * Input: Topics rows from Google Sheets read (items) and {site} in $json.\n * Output: one item per stuck row => {site, rowNumber, updateFields}\n */\n\nconst threshold = Number($env.PROCESSING_STUCK_THRESHOLD_MINUTES || '{PROCESSING_STUCK_THRESHOLD_MINUTES}' || 60);\nconst now = new Date();\nfunction parseIso(s) { const d = new Date(s); return isNaN(d.getTime()) ? null : d; }\n\nconst site = $json.site;\nconst out = [];\n\nfor (const it of items) {\n  const r = it.json || {};\n  const status = String(r.status || '').toUpperCase();\n  if (status !== 'PROCESSING') continue;\n  const locked = parseIso(r.locked_at);\n  if (!locked) continue;\n  const ageMin = (now.getTime() - locked.getTime()) / 60000;\n  if (ageMin >= threshold) {\n    out.push({\n      json: {\n        site,\n        topicRowNumber: r.rowNumber,\n        error: 'stuck lock cleanup',\n        updated_at: now.toISOString()\n      }\n    });\n  }\n}\n\nreturn out;\n"
+      },
+      "id": "b9a5217d-7fc2-4901-8cbe-5362eb48b3fc",
+      "name": "Find Stuck PROCESSING",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "32403d5a-fd1a-4166-8a0f-f5beeb3281f0",
+      "name": "For Each Stuck Row",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "={{$json.site.topics_sheet_id}}",
+        "sheetName": "={{$json.site.topics_tab_name || 'Topics'}}",
+        "rowNumber": "={{$json.topicRowNumber}}",
+        "dataToSend": "autoMapInputData",
+        "options": {},
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "field": "status",
+              "value": "FAILED"
+            },
+            {
+              "field": "error",
+              "value": "={{$json.error}}"
+            },
+            {
+              "field": "updated_at",
+              "value": "={{$json.updated_at}}"
+            }
+          ]
+        }
+      },
+      "id": "3a8c6be3-6748-41ae-a87d-742115afdf1d",
+      "name": "Mark FAILED (stuck lock)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{'https://api.telegram.org/bot' + ($json.site.telegram_bot_token || '{TELEGRAM_BOT_TOKEN}') + '/sendMessage'}}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "chat_id",
+              "value": "={{$json.site.telegram_chat_id || '{TELEGRAM_CHAT_ID}'}}"
+            },
+            {
+              "name": "text",
+              "value": "={{'[WP Autoblog] Cleanup: stuck lock marked FAILED (row ' + $json.topicRowNumber + ')'}}"
+            }
+          ]
+        }
+      },
+      "id": "aada79b3-0d85-4316-8449-ffdbfea0c376",
+      "name": "Telegram Cleanup Notify (optional)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1960,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Hourly": {
+      "main": [
+        [
+          {
+            "node": "Read Site Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Site Registry": {
+      "main": [
+        [
+          {
+            "node": "Normalize Site Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Site Rows": {
+      "main": [
+        [
+          {
+            "node": "For Each Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "For Each Site": {
+      "main": [
+        [
+          {
+            "node": "Read Topics (site)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Topics (site)": {
+      "main": [
+        [
+          {
+            "node": "Find Stuck PROCESSING",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Stuck PROCESSING": {
+      "main": [
+        [
+          {
+            "node": "For Each Stuck Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "For Each Stuck Row": {
+      "main": [
+        [
+          {
+            "node": "Mark FAILED (stuck lock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "For Each Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark FAILED (stuck lock)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Cleanup Notify (optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Cleanup Notify (optional)": {
+      "main": [
+        [
+          {
+            "node": "For Each Stuck Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0d79ce73-0e27-402c-939c-d1bddc0e2bf0",
+  "id": "7592107f-ce15-4301-8d20-b17e0c6e7e0e",
+  "tags": []
+}

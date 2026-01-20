@@ -1,0 +1,26 @@
+# Ignore sensitive credentials
+*.env
+.env*
+credentials.json
+secrets/
+
+# Ignore local development files
+.vscode/
+*.log
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node modules (if any local tooling)
+node_modules/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Test outputs
+test-output/
+debug-*.json
