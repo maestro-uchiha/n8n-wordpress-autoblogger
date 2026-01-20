@@ -98,13 +98,13 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "version": 2, "caseSensitive": true },
+          "options": { "version": 2, "caseSensitive": true, "looseTypeValidation": true },
           "combinator": "and",
           "conditions": [
             {
               "id": "cond-stuck",
-              "operator": { "type": "boolean", "operation": "notTrue" },
-              "leftValue": "={{ $json.no_stuck }}",
+              "operator": { "type": "string", "operation": "notEmpty" },
+              "leftValue": "={{ $json.topic }}",
               "rightValue": ""
             }
           ]
