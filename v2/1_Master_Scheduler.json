@@ -230,6 +230,7 @@
             "post_url": "={{ $json.post_url }}",
             "error": "",
             "locked_at": "",
+            "created_at": "={{ $now.toISO() }}",
             "updated_at": "={{ $now.toISO() }}"
           },
           "matchingColumns": ["topic"],
@@ -240,6 +241,7 @@
             { "id": "post_url", "displayName": "post_url", "type": "string", "canBeUsedToMatch": false },
             { "id": "error", "displayName": "error", "type": "string", "canBeUsedToMatch": false },
             { "id": "locked_at", "displayName": "locked_at", "type": "string", "canBeUsedToMatch": false },
+            { "id": "created_at", "displayName": "created_at", "type": "string", "canBeUsedToMatch": false },
             { "id": "updated_at", "displayName": "updated_at", "type": "string", "canBeUsedToMatch": false }
           ]
         },
