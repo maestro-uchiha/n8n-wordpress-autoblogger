@@ -1,0 +1,3 @@
+site_id,site_name,base_url,auth_mode,jwt_user,jwt_password,jwt_token,wp_user,wp_app_password,topics_spreadsheet_id,topics_gid,post_interval_minutes,last_posted_at,enabled,post_status,tone,min_words,max_words,faq_count,images_count,internal_links_count,external_links_count,youtube_embeds_count,image_provider_priority
+site_001,My Tech Blog,https://mytechblog.com,jwt,admin,your_jwt_password,,,,1ABC123_TOPICS_SHEET_ID,0,120,,TRUE,publish,informative and engaging,1000,1500,3,0,2,3,1,"pexels"
+site_002,Health Tips Site,https://healthtips.example.com,basic,,,editor,xxxx xxxx xxxx xxxx,2XYZ456_TOPICS_SHEET_ID,0,180,,TRUE,draft,friendly and helpful,1000,1500,3,0,2,3,1,"pexels"
