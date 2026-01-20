@@ -3,7 +3,7 @@
  * Plugin Name: n8n Autoblogger Helper
  * Description: REST API endpoints for n8n autoblogging - image uploads, SEO meta, and category management
  * Version: 1.2
- * Author: Autoblogger
+ * Author: Maestro Uchiha
  */
 
 if (!defined('ABSPATH')) exit;
