@@ -386,7 +386,7 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "row_number": "={{ $json.site?.row_number || $json.site_config?.row_number }}",
+            "row_number": "={{ $('Execute Publisher').first().json.site?.row_number || $('Execute Publisher').first().json.site_config?.row_number }}",
             "last_posted_at": "={{ $now.toISO() }}"
           },
           "matchingColumns": [
@@ -690,7 +690,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "v2.4-fix-updates",
+  "versionId": "v2.5-fix-data-reference",
   "meta": {
     "templateId": "autoblogger-v2.3"
   },
