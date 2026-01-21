@@ -302,7 +302,7 @@
       "main": [
         [
           {
-            "node": "Reset to FAILED",
+            "node": "Reset to QUEUED",
             "type": "main",
             "index": 0
           }
@@ -316,7 +316,7 @@
         ]
       ]
     },
-    "Reset to FAILED": {
+    "Reset to QUEUED": {
       "main": [
         [
           {
