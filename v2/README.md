@@ -8,7 +8,7 @@ A "set & forget" multi-site WordPress autoblogging system built for n8n Cloud v2
 |----------|-------------|
 | `1_Master_Scheduler.json` | Orchestrator - runs every 10 min, checks due sites, triggers publishing |
 | `2_Publisher.json` | Core engine - generates content, images, and publishes to WordPress |
-| `3_Cleanup.json` | Maintenance - resets stuck PROCESSING locks to FAILED hourly |
+| `3_Cleanup.json` | Maintenance - resets FAILED and stuck PROCESSING posts to QUEUED |
 
 ---
 
@@ -28,11 +28,14 @@ Create these variables in **Settings → Variables**:
 | `OPENAI_IMAGE_MODEL` | Image model (default: dall-e-3) | `dall-e-3` |
 | `GOOGLE_CSE_API_KEY` | Google Custom Search API key | `AIza...` |
 | `GOOGLE_CSE_CX` | Google Custom Search Engine ID | `abc123:xyz` |
+| `SERPER_API_KEY` | (Optional) Serper.dev API key (fallback for CSE) | `...` |
 | `YOUTUBE_API_KEY` | YouTube Data API v3 key | `AIza...` |
 | `FAL_API_KEY` | (Optional) fal.ai API key | `...` |
 | `PEXELS_API_KEY` | (Optional) Pexels API key | `...` |
+| `FASTINDEX_API_KEY` | (Optional) FastIndex.eu API key | `...` |
 | `TELEGRAM_BOT_TOKEN` | (Optional) Telegram notifications | `123456:ABC...` |
 | `TELEGRAM_CHAT_ID` | (Optional) Telegram chat ID | `-1001234567890` |
+| `PROCESSING_STUCK_THRESHOLD_MINUTES` | (Optional) Cleanup threshold (default: 30) | `60` |
 
 ### Step 2: Google Sheets Structure
 
@@ -142,8 +145,9 @@ Master Scheduler (every 10 min)
 
 Cleanup (every hour)
     │
-    ├─→ Find PROCESSING rows older than 30 min
-    └─→ Reset them to FAILED
+    ├─→ Find FAILED rows (reset for retry)
+    ├─→ Find PROCESSING rows older than threshold
+    └─→ Reset all to QUEUED, clear locked_at
 ```
 
 ---
@@ -173,7 +177,7 @@ Cleanup (every hour)
 - Check the `image_errors` array in the output for details
 
 ### External links not inserting
-- Verify `GOOGLE_CSE_API_KEY` and `GOOGLE_CSE_CX` are set
+- Verify `GOOGLE_CSE_API_KEY` and `GOOGLE_CSE_CX` are set, OR `SERPER_API_KEY` as fallback
 - Check `external_links_count` is > 0
 - Look at `enrichment.external_links_inserted` in output
 
@@ -225,4 +229,5 @@ The Publisher returns detailed output:
 
 ## 🔄 Version History
 
+- **v2.47**: Serper.dev fallback for Google CSE, FastIndex integration, distributed external links (no clustering), Cleanup resets FAILED+PROCESSING
 - **v2.0**: Clean rebuild with hardened input parsing, improved link injection, proper YouTube embeds

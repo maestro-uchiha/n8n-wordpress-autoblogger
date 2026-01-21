@@ -1,9 +1,9 @@
 # n8n WordPress Autoblogger
-## Complete User Guide v2.31
+## Complete User Guide v2.47
 
 ---
 
-**Version:** 2.31  
+**Version:** 2.47  
 **Last Updated:** January 2026  
 **License:** MIT
 
@@ -35,7 +35,7 @@ The n8n WordPress Autoblogger is an automated content publishing system that:
 - **Embeds relevant YouTube videos** for engagement
 - **Manages SEO metadata** for Yoast SEO and RankMath
 - **Supports multiple WordPress sites** from a single dashboard
-- **Sends notifications** via Telegram, Email, and SpeedyIndex
+- **Sends notifications** via Telegram, Email, and instant indexing APIs
 
 ## How It Works
 
@@ -185,7 +185,7 @@ Create a new Google Spreadsheet and add these columns:
 #### Notifications
 | Column | Default | Description |
 |--------|---------|-------------|
-| speedyindex_enabled | FALSE | Submit to SpeedyIndex |
+| indexing_enabled | FALSE | Submit to FastIndex/SpeedyIndex |
 | telegram_enabled | TRUE | Telegram alerts |
 | email_enabled | FALSE | Email notifications |
 
@@ -287,6 +287,7 @@ Go to **Settings → Variables** in n8n and add:
 |----------|-------------|
 | GOOGLE_CSE_API_KEY | Google Custom Search API key |
 | GOOGLE_CSE_CX | Search Engine ID |
+| SERPER_API_KEY | Serper.dev API (fallback for Google CSE) |
 | YOUTUBE_API_KEY | YouTube Data API key |
 
 ### Optional - Image Generation
@@ -302,6 +303,17 @@ Go to **Settings → Variables** in n8n and add:
 | TELEGRAM_CHAT_ID | Chat/group ID |
 | NOTIFICATION_EMAIL | Email recipient |
 | RESEND_API_KEY | Resend.com API key |
+
+### Optional - Instant Indexing
+| Variable | Description |
+|----------|-------------|
+| FASTINDEX_API_KEY | FastIndex.eu API key (recommended) |
+| SPEEDYINDEX_API_KEY | SpeedyIndex API key (legacy) |
+
+### Optional - Cleanup Configuration
+| Variable | Default | Description |
+|----------|---------|-------------|
+| PROCESSING_STUCK_THRESHOLD_MINUTES | 30 | Minutes before resetting stuck PROCESSING posts |
 
 ---
 
@@ -339,7 +351,7 @@ Go to **Settings → Variables** in n8n and add:
 | openai_model | String | | gpt-4o-mini | GPT model |
 | openai_image_model | String | | dall-e-3 | Image model |
 | fal_model | String | | fal-ai/flux/schnell | fal model |
-| speedyindex_enabled | Boolean | | FALSE | SpeedyIndex |
+| indexing_enabled | Boolean | | FALSE | FastIndex/SpeedyIndex |
 | telegram_enabled | Boolean | | TRUE | Telegram alerts |
 | email_enabled | Boolean | | FALSE | Email alerts |
 
@@ -554,7 +566,10 @@ A single Code node that handles:
 9. Notifications
 
 ### Cleanup Workflow
-Resets topics stuck in PROCESSING state after crashes.
+Automatically resets stuck topics for retry:
+- **FAILED posts**: Always reset to QUEUED for retry
+- **Stuck PROCESSING posts**: Reset if locked longer than `PROCESSING_STUCK_THRESHOLD_MINUTES` (default: 30 minutes)
+- Clears `locked_at` and `error` fields
 
 ## WordPress Plugin API
 

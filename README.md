@@ -1,4 +1,4 @@
-# n8n WordPress Autoblogger v2.31
+# n8n WordPress Autoblogger v2.47
 
 A powerful, fully automated blog publishing system using n8n workflows and WordPress REST API.
 
@@ -11,7 +11,9 @@ A powerful, fully automated blog publishing system using n8n workflows and WordP
 - **YouTube Embeds**: Auto-embed relevant videos from YouTube API
 - **SEO Integration**: Native Yoast SEO and RankMath support
 - **Auto-Categories**: Creates categories automatically if they don't exist
-- **Notifications**: Telegram, Email (Resend/SendGrid/Mailgun/SMTP2GO), SpeedyIndex
+- **Notifications**: Telegram, Email (Resend/SendGrid/Mailgun/SMTP2GO)
+- **Instant Indexing**: FastIndex.eu and SpeedyIndex API integration
+- **Serper.dev Fallback**: Google SERP results when Google CSE unavailable
 
 ## 🚀 Quick Start
 
@@ -88,4 +90,4 @@ Issues and PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-**Version**: 2.31 | **Last Updated**: January 2026
+**Version**: 2.47 | **Last Updated**: January 2026

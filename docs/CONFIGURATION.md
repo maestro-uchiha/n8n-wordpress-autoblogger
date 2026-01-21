@@ -84,7 +84,7 @@ Complete reference for all configuration options in the n8n WordPress Autoblogge
 
 | Column | Type | Default | Description |
 |--------|------|---------|-------------|
-| `speedyindex_enabled` | Boolean | FALSE | Submit to SpeedyIndex |
+| `indexing_enabled` | Boolean | FALSE | Submit to FastIndex/SpeedyIndex |
 | `telegram_enabled` | Boolean | TRUE | Send Telegram alerts |
 | `email_enabled` | Boolean | FALSE | Send email notifications |
 
@@ -137,6 +137,7 @@ Set these in **Settings → Variables**:
 |----------|-------------|
 | `GOOGLE_CSE_API_KEY` | Google Custom Search API key |
 | `GOOGLE_CSE_CX` | Google Custom Search Engine ID |
+| `SERPER_API_KEY` | Serper.dev API key (fallback for Google CSE) |
 | `YOUTUBE_API_KEY` | YouTube Data API v3 key |
 
 ### Image Providers
@@ -152,11 +153,18 @@ Set these in **Settings → Variables**:
 
 | Variable | Description |
 |----------|-------------|
-| `SPEEDYINDEX_API_KEY` | SpeedyIndex API key |
+| `FASTINDEX_API_KEY` | FastIndex.eu API key (recommended) |
+| `SPEEDYINDEX_API_KEY` | SpeedyIndex API key (legacy) |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | Telegram chat/group ID |
 | `NOTIFICATION_EMAIL` | Email recipient |
 | `EMAIL_FROM` | Sender email address |
+
+### Cleanup Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PROCESSING_STUCK_THRESHOLD_MINUTES` | 30 | Minutes before resetting stuck PROCESSING posts |
 
 ### Email Providers (choose one)
 
@@ -243,12 +251,19 @@ If the first provider fails, the next is tried automatically.
    - `EMAIL_FROM` (must be from verified domain)
    - `NOTIFICATION_EMAIL`
 
-### SpeedyIndex
+### Instant Indexing (FastIndex or SpeedyIndex)
 
+**FastIndex.eu (Recommended)**:
+1. Sign up at [fastindex.eu](https://fastindex.eu)
+2. Get API key
+3. Set `FASTINDEX_API_KEY`
+4. Set `indexing_enabled` to TRUE per site
+
+**SpeedyIndex (Legacy)**:
 1. Sign up at [speedyindex.com](https://speedyindex.com)
 2. Get API key
 3. Set `SPEEDYINDEX_API_KEY`
-4. Set `speedyindex_enabled` to TRUE per site
+4. Set `indexing_enabled` to TRUE per site
 
 ---
 
@@ -271,7 +286,7 @@ internal_links_count: 3
 external_links_count: 5
 youtube_embeds_count: 1
 image_provider_priority: fal,openai,pexels
-speedyindex_enabled: TRUE
+indexing_enabled: TRUE
 telegram_enabled: TRUE
 ```
 
