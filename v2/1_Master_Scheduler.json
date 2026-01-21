@@ -4,14 +4,22 @@
     {
       "parameters": {
         "rule": {
-          "interval": [{ "field": "minutes", "minutesInterval": 10 }]
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
         }
       },
       "id": "trigger-001",
       "name": "Every 10 Minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -31,7 +39,10 @@
       "name": "Read Site Registry",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [220, 0],
+      "position": [
+        220,
+        0
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "YOUR_CREDENTIAL_ID",
@@ -47,7 +58,10 @@
       "name": "Schedule Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -57,7 +71,10 @@
       "name": "For Each Site",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [660, 0]
+      "position": [
+        660,
+        0
+      ]
     },
     {
       "parameters": {
@@ -77,7 +94,10 @@
       "name": "Read Topics",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [880, 0],
+      "position": [
+        880,
+        0
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "YOUR_CREDENTIAL_ID",
@@ -93,17 +113,27 @@
       "name": "Pick Topic",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 0]
+      "position": [
+        1100,
+        0
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "version": 2, "caseSensitive": true, "looseTypeValidation": true },
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "looseTypeValidation": true
+          },
           "combinator": "and",
           "conditions": [
             {
               "id": "cond-has-topic",
-              "operator": { "type": "string", "operation": "notEmpty" },
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              },
               "leftValue": "={{ $json.topicRow?.topic }}",
               "rightValue": ""
             }
@@ -115,7 +145,10 @@
       "name": "Has Topic?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1320, 0]
+      "position": [
+        1320,
+        0
+      ]
     },
     {
       "parameters": {
@@ -138,12 +171,34 @@
             "locked_at": "={{ $json.topicRow.locked_at }}",
             "error": ""
           },
-          "matchingColumns": ["topic"],
+          "matchingColumns": [
+            "topic"
+          ],
           "schema": [
-            { "id": "topic", "displayName": "topic", "type": "string", "canBeUsedToMatch": true },
-            { "id": "status", "displayName": "status", "type": "string", "canBeUsedToMatch": false },
-            { "id": "locked_at", "displayName": "locked_at", "type": "string", "canBeUsedToMatch": false },
-            { "id": "error", "displayName": "error", "type": "string", "canBeUsedToMatch": false }
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "locked_at",
+              "displayName": "locked_at",
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
           ]
         },
         "options": {}
@@ -152,7 +207,10 @@
       "name": "Lock Topic (PROCESSING)",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1540, -100],
+      "position": [
+        1540,
+        -100
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "YOUR_CREDENTIAL_ID",
@@ -168,7 +226,10 @@
       "name": "Prepare Publisher Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1760, -100]
+      "position": [
+        1760,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -184,17 +245,26 @@
       "name": "Execute Publisher",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1980, -100]
+      "position": [
+        1980,
+        -100
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "version": 2, "looseTypeValidation": true },
+          "options": {
+            "version": 2,
+            "looseTypeValidation": true
+          },
           "combinator": "and",
           "conditions": [
             {
               "id": "cond-ok",
-              "operator": { "type": "string", "operation": "equals" },
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
               "leftValue": "={{ String($json.ok) }}",
               "rightValue": "true"
             }
@@ -206,7 +276,10 @@
       "name": "Success?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [2200, -100]
+      "position": [
+        2200,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -224,25 +297,60 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "topic": "={{ $json.topicRow.topic }}",
+            "row_number": "={{ $json.topicRow?.row_number }}",
             "status": "DONE",
             "post_id": "={{ $json.post_id }}",
             "post_url": "={{ $json.post_url }}",
             "error": "",
             "locked_at": "",
-            "created_at": "={{ $now.toISO() }}",
             "updated_at": "={{ $now.toISO() }}"
           },
-          "matchingColumns": ["topic"],
+          "matchingColumns": [
+            "row_number"
+          ],
           "schema": [
-            { "id": "topic", "displayName": "topic", "type": "string", "canBeUsedToMatch": true },
-            { "id": "status", "displayName": "status", "type": "string", "canBeUsedToMatch": false },
-            { "id": "post_id", "displayName": "post_id", "type": "string", "canBeUsedToMatch": false },
-            { "id": "post_url", "displayName": "post_url", "type": "string", "canBeUsedToMatch": false },
-            { "id": "error", "displayName": "error", "type": "string", "canBeUsedToMatch": false },
-            { "id": "locked_at", "displayName": "locked_at", "type": "string", "canBeUsedToMatch": false },
-            { "id": "created_at", "displayName": "created_at", "type": "string", "canBeUsedToMatch": false },
-            { "id": "updated_at", "displayName": "updated_at", "type": "string", "canBeUsedToMatch": false }
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "post_url",
+              "displayName": "post_url",
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "locked_at",
+              "displayName": "locked_at",
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
           ]
         },
         "options": {}
@@ -251,7 +359,10 @@
       "name": "Mark Topic DONE",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [2200, -200],
+      "position": [
+        2200,
+        -200
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "YOUR_CREDENTIAL_ID",
@@ -275,13 +386,25 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "site_id": "={{ $json.site?.site_id || $json.site_config?.site_id }}",
+            "row_number": "={{ $json.site?.row_number || $json.site_config?.row_number }}",
             "last_posted_at": "={{ $now.toISO() }}"
           },
-          "matchingColumns": ["site_id"],
+          "matchingColumns": [
+            "row_number"
+          ],
           "schema": [
-            { "id": "site_id", "displayName": "site_id", "type": "string", "canBeUsedToMatch": true },
-            { "id": "last_posted_at", "displayName": "last_posted_at", "type": "string", "canBeUsedToMatch": false }
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_posted_at",
+              "displayName": "last_posted_at",
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
           ]
         },
         "options": {}
@@ -290,7 +413,10 @@
       "name": "Update Site last_posted_at",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [2420, -200],
+      "position": [
+        2420,
+        -200
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "YOUR_CREDENTIAL_ID",
@@ -314,19 +440,39 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "topic": "={{ $json.topicRow.topic }}",
+            "row_number": "={{ $json.topicRow?.row_number }}",
             "status": "FAILED",
             "error": "={{ $json.error || $json.failed_at_step || 'Unknown error' }}",
-            "locked_at": "",
-            "updated_at": "={{ $now.toISO() }}"
+            "locked_at": ""
           },
-          "matchingColumns": ["topic"],
+          "matchingColumns": [
+            "row_number"
+          ],
           "schema": [
-            { "id": "topic", "displayName": "topic", "type": "string", "canBeUsedToMatch": true },
-            { "id": "status", "displayName": "status", "type": "string", "canBeUsedToMatch": false },
-            { "id": "error", "displayName": "error", "type": "string", "canBeUsedToMatch": false },
-            { "id": "locked_at", "displayName": "locked_at", "type": "string", "canBeUsedToMatch": false },
-            { "id": "updated_at", "displayName": "updated_at", "type": "string", "canBeUsedToMatch": false }
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "error",
+              "displayName": "error",
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "locked_at",
+              "displayName": "locked_at",
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
           ]
         },
         "options": {}
@@ -335,7 +481,10 @@
       "name": "Mark Topic FAILED",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [2200, 0],
+      "position": [
+        2200,
+        0
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "YOUR_CREDENTIAL_ID",
@@ -349,68 +498,201 @@
       "name": "No Topics (Skip)",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1540, 100]
+      "position": [
+        1540,
+        100
+      ]
     }
   ],
   "connections": {
     "Every 10 Minutes": {
-      "main": [[{ "node": "Read Site Registry", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Read Site Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Read Site Registry": {
-      "main": [[{ "node": "Schedule Gate", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Schedule Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Schedule Gate": {
-      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "For Each Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "For Each Site": {
       "main": [
-        [{ "node": "Read Topics", "type": "main", "index": 0 }],
+        [
+          {
+            "node": "Read Topics",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Read Topics": {
-      "main": [[{ "node": "Pick Topic", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Pick Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Pick Topic": {
-      "main": [[{ "node": "Has Topic?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Has Topic?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Has Topic?": {
       "main": [
-        [{ "node": "Lock Topic (PROCESSING)", "type": "main", "index": 0 }],
-        [{ "node": "No Topics (Skip)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Lock Topic (PROCESSING)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Topics (Skip)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Lock Topic (PROCESSING)": {
-      "main": [[{ "node": "Prepare Publisher Input", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Prepare Publisher Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Prepare Publisher Input": {
-      "main": [[{ "node": "Execute Publisher", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Execute Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Execute Publisher": {
-      "main": [[{ "node": "Success?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Success?": {
       "main": [
-        [{ "node": "Mark Topic DONE", "type": "main", "index": 0 }],
-        [{ "node": "Mark Topic FAILED", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Mark Topic DONE",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Topic FAILED",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Mark Topic DONE": {
-      "main": [[{ "node": "Update Site last_posted_at", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Update Site last_posted_at",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Update Site last_posted_at": {
-      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "For Each Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Mark Topic FAILED": {
-      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "For Each Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "No Topics (Skip)": {
-      "main": [[{ "node": "For Each Site", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "For Each Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
-  "settings": { "executionOrder": "v1" },
-  "versionId": "v2.3-full-spec",
-  "meta": { "templateId": "autoblogger-v2.3" },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "v2.4-fix-updates",
+  "meta": {
+    "templateId": "autoblogger-v2.3"
+  },
   "tags": []
 }
