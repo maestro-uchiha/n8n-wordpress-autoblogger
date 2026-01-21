@@ -107,7 +107,7 @@
     },
     {
       "parameters": {
-        "jsCode": "/**\n * Find stuck locks: PROCESSING rows older than threshold minutes.\n * Uses PROCESSING_STUCK_THRESHOLD_MINUTES variable (default: 30)\n */\nconst now = new Date();\nconst LOCK_TIMEOUT_MINUTES = Number($vars.PROCESSING_STUCK_THRESHOLD_MINUTES || 30);\nconst siteInfo = $('For Each Site').first().json;\n\nconst stuckRows = [];\nconst debugInfo = [];\n\nfor (const item of $input.all()) {\n  const row = item.json;\n  const status = String(row.status || '').trim().toUpperCase();\n  \n  debugInfo.push({ topic: row.topic, status: status, locked_at: row.locked_at });\n  \n  if (status === 'PROCESSING') {\n    let lockedAt = null;\n    if (row.locked_at) {\n      // Try parsing various date formats\n      const ts = String(row.locked_at).trim();\n      lockedAt = new Date(ts);\n      // If invalid, try replacing space with T for ISO format\n      if (isNaN(lockedAt.getTime()) && ts.includes(' ')) {\n        lockedAt = new Date(ts.replace(' ', 'T'));\n      }\n    }\n    \n    const isValidDate = lockedAt && !isNaN(lockedAt.getTime());\n    const elapsedMin = isValidDate ? (now - lockedAt) / 60000 : -1;\n    \n    // If stuck longer than threshold OR no valid locked_at timestamp\n    if (!isValidDate || elapsedMin > LOCK_TIMEOUT_MINUTES) {\n      stuckRows.push({\n        json: {\n          ...siteInfo,\n          topic: row.topic,\n          locked_at: row.locked_at || 'unknown',\n          elapsed_minutes: Math.round(elapsedMin),\n          threshold_minutes: LOCK_TIMEOUT_MINUTES\n        }\n      });\n    }\n  }\n}\n\nif (stuckRows.length > 0) {\n  return stuckRows;\n} else {\n  return [{ json: { no_stuck: true, ...siteInfo, debug: debugInfo, threshold: LOCK_TIMEOUT_MINUTES } }];\n}\n"
+        "jsCode": "/**\n * Find stuck/failed rows to reset to QUEUED.\n * - PROCESSING rows older than threshold minutes\n * - FAILED rows (always reset for retry)\n * Uses PROCESSING_STUCK_THRESHOLD_MINUTES variable (default: 30)\n */\nconst now = new Date();\nconst LOCK_TIMEOUT_MINUTES = Number($vars.PROCESSING_STUCK_THRESHOLD_MINUTES || 30);\nconst siteInfo = $('For Each Site').first().json;\n\nconst rowsToReset = [];\nconst debugInfo = [];\n\nfor (const item of $input.all()) {\n  const row = item.json;\n  const status = String(row.status || '').trim().toUpperCase();\n  \n  debugInfo.push({ topic: row.topic, status: status, locked_at: row.locked_at });\n  \n  // Reset FAILED posts for retry\n  if (status === 'FAILED') {\n    rowsToReset.push({\n      json: {\n        ...siteInfo,\n        topic: row.topic,\n        original_status: 'FAILED',\n        reason: 'failed_retry'\n      }\n    });\n    continue;\n  }\n  \n  // Reset stuck PROCESSING posts\n  if (status === 'PROCESSING') {\n    let lockedAt = null;\n    if (row.locked_at) {\n      const ts = String(row.locked_at).trim();\n      lockedAt = new Date(ts);\n      if (isNaN(lockedAt.getTime()) && ts.includes(' ')) {\n        lockedAt = new Date(ts.replace(' ', 'T'));\n      }\n    }\n    \n    const isValidDate = lockedAt && !isNaN(lockedAt.getTime());\n    const elapsedMin = isValidDate ? (now - lockedAt) / 60000 : -1;\n    \n    if (!isValidDate || elapsedMin > LOCK_TIMEOUT_MINUTES) {\n      rowsToReset.push({\n        json: {\n          ...siteInfo,\n          topic: row.topic,\n          original_status: 'PROCESSING',\n          locked_at: row.locked_at || 'unknown',\n          elapsed_minutes: Math.round(elapsedMin),\n          reason: 'stuck_processing'\n        }\n      });\n    }\n  }\n}\n\nif (rowsToReset.length > 0) {\n  return rowsToReset;\n} else {\n  return [{ json: { no_reset_needed: true, ...siteInfo, debug: debugInfo, threshold: LOCK_TIMEOUT_MINUTES } }];\n}\n"
       },
       "id": "find-stuck-001",
       "name": "Find Stuck Locks",
@@ -168,6 +168,7 @@
           "value": {
             "topic": "={{ $json.topic }}",
             "status": "QUEUED",
+            "locked_at": "",
             "error": "",
             "updated_at": "={{ $now.toISO() }}"
           },
@@ -184,6 +185,12 @@
             {
               "id": "status",
               "displayName": "status",
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "locked_at",
+              "displayName": "locked_at",
               "type": "string",
               "canBeUsedToMatch": false
             },
