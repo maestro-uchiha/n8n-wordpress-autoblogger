@@ -90,6 +90,7 @@ With your actual Publisher workflow ID (visible in the URL when editing the Publ
 | `jwt_user` | JWT username |
 | `jwt_password` | JWT password |
 | `jwt_token` | Cached JWT token |
+| `jwt_token_endpoint` | Custom JWT endpoint URL (optional) |
 | `wp_user` | WordPress username (for basic auth) |
 | `wp_app_password` | Application password |
 
@@ -97,6 +98,7 @@ With your actual Publisher workflow ID (visible in the URL when editing the Publ
 | Column | Description | Default |
 |--------|-------------|---------|
 | `post_status` | `draft` or `publish` | `draft` |
+| `default_category` | Default category if none specified | - |
 | `tone` | Writing style | `informative and engaging` |
 | `min_words` | Minimum word count | `1500` |
 | `max_words` | Maximum word count | `2500` |

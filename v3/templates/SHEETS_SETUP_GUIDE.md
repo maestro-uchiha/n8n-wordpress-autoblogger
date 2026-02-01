@@ -99,6 +99,7 @@ After importing the v3 workflows, you need to manually replace placeholders:
 | `jwt_user` | If jwt | JWT username | `admin` |
 | `jwt_password` | If jwt | JWT password | `secretpass123` |
 | `jwt_token` | Optional | Cached JWT token | (auto-managed) |
+| `jwt_token_endpoint` | Optional | Custom JWT endpoint URL | (default: /wp-json/jwt-auth/v1/token) |
 | `wp_user` | If basic | WordPress username | `editor` |
 | `wp_app_password` | If basic | Application password | `xxxx xxxx xxxx xxxx` |
 | `topics_spreadsheet_id` | ✅ | Spreadsheet ID for topics | Same as registry or different |
@@ -112,6 +113,7 @@ After importing the v3 workflows, you need to manually replace placeholders:
 | Column | Required | Description | Default |
 |--------|----------|-------------|---------|
 | `post_status` | Optional | `publish` or `draft` | `draft` |
+| `default_category` | Optional | Default category if none specified | - |
 | `tone` | Optional | Writing style | `informative and engaging` |
 | `min_words` | Optional | Min article length | `1500` |
 | `max_words` | Optional | Max article length | `2500` |
